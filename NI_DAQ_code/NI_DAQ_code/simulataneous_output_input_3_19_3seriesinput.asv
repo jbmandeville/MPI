@@ -1,0 +1,187 @@
+clear all; %close all;
+
+v = daq.getVendors;
+d  = daq.getDevices;
+s = daq.createSession(v.ID);
+s.Rate = 250e3;
+addAnalogOutputChannel(s,d(1).ID, 0, 'Voltage');
+addAnalogOutputChannel(s,d(1).ID, 1, 'Voltage');
+pickupcoil = 0;
+
+waveform(1) = 0; legendtext{1} = char(['ni-daq output']);
+waveform(end+1) = 1; legendtext{end+1} = char(['Techron input']);
+waveform(end+1) = 2; legendtext{end+1} = char(['Techron sample']);
+waveform(end+1) = 3; legendtext{end+1} = char(['Pickup coil']);
+
+
+%%%USER INPUT%%%%%%%%%%%%%%
+squarewave = 0;
+duration = .01;
+drive_freq = 25e3;
+amp = .685;  %Volts
+
+if amp > 2
+    ERRROR
+end
+
+%%%USER INPUT%%%%%%%%%%%%%%
+
+
+%% NI-DAQ output
+time = [0:1/s.Rate:duration];
+blocksize = duration*s.Rate;
+
+if squarewave == 1
+    drive_freq = 1;
+    output_data_temp = 1*(amp/2+amp/2*square(2*pi*drive_freq*(time-0.2), .5)).';
+    
+else
+    output_data_temp = 1*amp*sin(2*pi*drive_freq*time).';
+    
+end
+
+output_data = [output_data_temp.^1, zeros(size(output_data_temp))];
+%%
+
+%% crop values for plots
+if squarewave == 1
+    %      crop_start = 1;
+    %      crop_end = numel(time);
+    crop_start = ceil(numel(time)*((0.1999/drive_freq)/duration));  %%number of time points for 10 periods of drive freq
+    crop_end = ceil(numel(time)*((0.2002/drive_freq)/duration));  %%number of time points for 10 periods of drive freq
+else
+    crop_start = 1;
+    crop_end = numel(time);
+    crop_start = ceil(numel(time)*((1/drive_freq)/duration));  %%number of time points for 10 periods of drive freq
+    crop_end = ceil(numel(time)*((10/drive_freq)/duration));  %%number of time points for 10 periods of drive freq
+end
+
+if crop_end < numel(duration*s.Rate)
+    crop_start = 1;
+    crop_end = numel(duration*s.Rate);
+    disp('duration too short for crop params - plotting full waveform');
+end
+%%
+
+
+Hd = bandpass_butterworth_filter_25e3_v2;
+
+btn = uicontrol('Style', 'pushbutton', 'String', 'stop',...
+    'Position', [20 20 50 20],...
+    'Callback', 'delete(gcbo)');
+colors = {'b','r','g','m','k'};
+
+figure(1);
+input_count = 1;
+
+
+while ishandle(btn)
+    
+    %     clf(1,'reset')
+
+    for input_count = 2:numel(waveform)
+        
+        
+        addAnalogInputChannel(s,d(1).ID, waveform(input_count), 'Voltage');
+        queueOutputData(s,output_data);
+        [captured_data] = s.startForeground();
+        
+        
+        %%plot time domain
+        subplot(2,1,1);
+
+    plot(time, 20*output_data(:,1), 'Color', colors{1});
+ 
+    xlim([time(crop_start), time(crop_end)]);
+    hold on;
+        if waveform(input_count) == 1
+            current_data = captured_data*20;
+            h1 = plot(time,current_data, 'Color', colors{input_count});
+            ylabel('Amps into solenoid')
+            xlabel('time (s)');   
+            plotmax = 20*amp*1.5; plotmin = -20*amp*1.5;
+            ylim([plotmin, plotmax])
+            YTick =[plotmin,plotmin/2, 0, plotmax/2, plotmax];
+            xlim([time(crop_start), time(crop_end)]);
+        elseif waveform(input_count) == 2
+                current_data = captured_data*20;
+                h2 = plot(time,current_data, 'Color', colors{input_count});
+                ylabel('Amps into solenoid')
+                xlabel('time (s)');      
+                plotmax = 20*amp*1.5; plotmin = -20*amp*1.5;
+            ylim([plotmin, plotmax])
+            YTick =[plotmin,plotmin/2, 0, plotmax/2, plotmax];
+            xlim([time(crop_start), time(crop_end)]);
+            
+        else
+            current_data = captured_data;
+            plot(time,current_data, 'Color', colors{input_count});
+            plotmax = 4*amp; plotmin = -4*amp;
+            legend(legendtext{1:input_count})
+            set(gca,'Box','off');   %# Turn off the box surrounding the whole axes
+            axesPosition = get(gca,'Position');          %# Get the current axes position
+            hNewAxes = axes('Position',axesPosition,...  %# Place a new axes on top...
+                'Color','none',...           %#   ... with no background color
+                'YLim',[plotmin, plotmax],...            %#   ... and a different scale
+                'YTick', [plotmin,plotmin/2, 0, plotmax/2, plotmax],...
+                'YAxisLocation','right',...  %#   ... located on the right
+                'XTick',[],...               %#   ... with no x tick marks
+                'Box','off');                %#   ... and no surrounding box
+            ylabel(hNewAxes,'voltage across pickup coil');  %# Add a label to the right y axis
+            xlabel('time (s)');
+        end
+
+        if squarewave == 1
+            ylim([20*amp*0.5, 20*amp*1.5])
+        end
+        subplot(2,1,1);
+        
+        title(['Acquired signal (duration = ',num2str(duration),'s, freq = ',num2str(drive_freq),'Hz, Amp = ',num2str(amp),'V)']);
+        
+        
+        %%
+        
+        
+        %% frequency spectrum plot
+        [f,mag] = daqdocfft(current_data,s.Rate,blocksize);
+        [f,output_mag] = daqdocfft(output_data,s.Rate,blocksize);
+        
+        subplot(2,1,2);
+        plot(f, output_mag(:,1), 'Color', colors{1});
+        hold on;
+        plot(f,mag, 'Color', colors{input_count});
+        
+        ylim([-100, 60]);
+        xlim([0, s.Rate/2]);
+        legend(legendtext{1:input_count});
+        
+        I0 = find(f > drive_freq - 100 & f < drive_freq +100);
+        log_amp0 = max(mag(I0,end));
+        
+        I3 = find(f > drive_freq*3 - 100 & f < drive_freq*3 +100);
+        log_amp3 = max(mag(I3,end));
+        
+        ratio_db = log_amp3 - log_amp0;
+        
+        if input_count == numel(waveform)
+            text(0,50, ['harmonic difference = ', num2str(ratio_db),' dB']);
+        end
+        
+        ylabel('Magnitude (dB)')
+        xlabel('Frequency (Hz)')
+        title(['Acquired signal (duration = ',num2str(duration),'s, freq = ',num2str(drive_freq),'Hz, Amp = ',num2str(amp),'V)']);
+
+        
+        removeChannel(s,3)
+%         pause(.1);
+    end
+    
+    subplot(2,1,1); hold off;
+    subplot(2,1,2); hold off;
+    
+ 
+    pause(.1);
+end
+
+
+
