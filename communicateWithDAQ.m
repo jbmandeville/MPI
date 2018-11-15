@@ -22,12 +22,13 @@ output_data_drive = (handles.amp*sin(2*pi*handles.drive_freq*handles.time+pi).')
 %output_data_shift = handles.shift_amp*ones(size(output_data_drive_padded));
 output_data_shift = handles.shift_amp*ones(size(output_data_drive));
 
+size(output_data_drive)
 output_data =[output_data_drive, output_data_shift];  % drive and shift data in two channels
 plotDAQInput(handles, output_data_drive, output_data_shift);
 
 if ( myDeviceSettings.connectionState == 1 )
     queueOutputData(myDaqStream.session, output_data);
-    temperatureData = inputSingleScan(myDaqStream.session);
+    temperatureData = inputSingleScan(myDaqStream.session);  % acquire 1 value from each channel
     [captured_data] = myDaqStream.session.startForeground();
     handles.timetrack(nRun) = toc(handles.tstart);
 else
