@@ -22,7 +22,7 @@ function varargout = MPI_GUI_V9g(varargin)
 
 % Edit the above text to modify the response to help MPI_GUI_V2_currentsense
 
-% Last Modified by GUIDE v2.5 15-Nov-2018 12:42:58
+% Last Modified by GUIDE v2.5 16-Nov-2018 10:39:19
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -81,7 +81,7 @@ if ( myDeviceSettings.connectionState == 1 )
 else
     display('assume no connection: DAQ not initialized');
 end
-
+disp(['rateContinuous = ', num2str(myDeviceSettings.rateContinuous)]);
 
 % myDaqStream.ch2 = myDaqStream.session.addAnalogInputChannel(devID, 4, 'Voltage');
 % myDaqStream.ch2.Range = [-10,10];
@@ -1194,4 +1194,3 @@ myDeviceSettings.connectionState = get(hObject,'Value');
 if ( myDeviceSettings.connectionState == 1 )
     configure_NIDevice(handles);
 end
-
